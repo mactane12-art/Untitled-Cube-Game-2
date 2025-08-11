@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Untitled Cube Game - Full Update</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    background: #121212;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    color: #eee;
+    user-select: none;
+  }
+  canvas {
+    display: block;
+    background: #222;
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw;
+    height: 100vh;
+  }
+  #ui {
+    position: fixed;
+    top: 15px;
+    left: 15px;
+    background: rgba(0,0,0,0.6);
+    padding: 12px 18px;
+    border-radius: 12px;
+    font-size: 18px;
+    z-index: 100;
+    user-select: none;
+  }
+  #menu {
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    background: #111;
+    padding: 30px 40px;
+    border-radius: 15px;
+    box-shadow: 0 0 15px #0f0;
+    text-align: center;
+    z-index: 101;
+  }
+  #menu h1 {
+    margin-bottom: 20px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+  }
+  .diff-btn {
+    cursor: pointer;
+    background: #333;
+    color: #eee;
+    border: none;
+    margin: 6px 10px;
+    padding: 12px 25px;
+    font-size: 18px;
+    border-radius: 10px;
+    transition: background 0.3s ease;
+    user-select: none;
+  }
+  .diff-btn.selected {
+    background: #0f0;
+    color: #121;
+    font-weight: 700;
+  }
+  #playBtn {
+    margin-top: 25px;
+    font-size: 20px;
+    background: #0a0;
+    color: #cfc;
+    border: none;
+    padding: 14px 40px;
+    border-radius: 15px;
+    cursor: pointer;
+    user-select: none;
+  }
+  #deathScreen {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    background: rgba(20, 0, 0, 0.9);
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 110;
+    color: #f33;
+  }
+  #deathScreen h2 {
+    font-size: 48px;
+    margin-bottom: 25px;
+    text-shadow: 0 0 10px #f00;
+  }
+  #deathScreen button {
+    cursor: pointer;
+    font-size: 22px;
+    padding: 12px 28px;
+    margin: 10px;
+    border-radius: 15px;
+    border: none;
+    color: #eee;
+    background: #700;
+    transition: background 0.3s ease;
+  }
+  #deathScreen button:hover {
+    background: #a00;
+  }
+  /* Joystick container */
+  #joystickContainer {
+    position: fixed;
+    bottom: 30px;
+    left: 30px;
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    background: rgba(255 255 255 / 0.12);
+    display: none;
+    touch-action: none;
+    z-index: 105;
+  }
+  #joystickInner {
+    position: absolute;
+    width: 60px; height: 60px;
+    top: 30px; left: 30px;
+    border-radius: 50%;
+    background: rgba(255 255 255 / 0.4);
+  }
+</style>
+</head>
+<body>
+
+<canvas id="gameCanvas"></canvas>
+
+<div id="ui">
+  ❤️ Health: <span id="health">5</span> &nbsp;&nbsp;
+  ⭐ Score: <span id="score">0</span> &nbsp;&nbsp;
+  🪙 Coins: <span id="coins">0</span> &nbsp;&nbsp;
+  🎚 Difficulty: <span id="difficultyText">easy</span>
+</div>
+
+<div id="menu">
+  <h1>Untitled Cube Game</h1>
+  <div>
+    <button class="diff-btn selected" data-diff="easy">Easy</button>
+    <button class="diff-btn" data-diff="medium">Medium</button>
+    <button class="diff-btn" data-diff="hard">Hard</button>
+  </div>
+  <button id="playBtn">Play</button>
+</div>
+
+<div id="deathScreen">
+  <h2>You Died!</h2>
+  <div>Your Score: <span id="finalScore">0</span></div>
+  <div>Your Coins: <span id="finalCoins">0</span></div>
+  <div style="margin-top: 30px;">
+    <button id="restartBtn">Restart</button>
+    <button id="mainMenuBtn">Main Menu</button>
+  </div>
+</div>
+
+<div id="joystickContainer">
+  <div id="joystickInner"></div>
+</div>
+
+<script>
+(() => {
+  // Setup canvas
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+
+  let W, H;
+  function resize() {
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = W;
+    canvas.height = H;
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // UI elements
+  const ui = document.getElementById('ui');
+  const healthSpan = document.getElementById('health');
+  const scoreSpan = document.getElementById('score');
+  const coinsSpan = document.getElementById('coins');
+  const difficultyText = document.getElementById('difficultyText');
+
+  const menu = document.getElementById('menu');
+  const playBtn = document.getElementById('playBtn');
+  const diffBtns = [...document.querySelectorAll('.diff-btn')];
+
+  const deathScreen = document.getElementById('deathScreen');
+  const finalScoreSpan = document.getElementById('finalScore');
+  const finalCoinsSpan = document.getElementById('finalCoins');
+  const restartBtn = document.getElementById('restartBtn');
+  const mainMenuBtn = document.getElementById('mainMenuBtn');
+
+  const joystickContainer = document.getElementById('joystickContainer');
+  const joystickInner = document.getElementById('joystickInner');
+
+  // Game variables
+  let difficulty = 'easy';
+
+  const difficulties = {
+    easy: { spawnInterval: 2200, enemySpeed: 1.8, scorePerSec: 1, coinMult: 1 },
+    medium: { spawnInterval: 1200, enemySpeed: 4, scorePerSec: 3, coinMult: 2 },
+    hard: { spawnInterval: 600, enemySpeed: 9, scorePerSec: 8, coinMult: 5 },
+  };
+
+  const player = {
+    size: 30,
+    x: 0,
+    y: 0,
+    speed: 5,
+    health: 5,
+    maxHealth: 5,
+    alive: true,
+  };
+
+  let enemies = [];
+  let particles = [];
+
+  let keys = {};
+  let lastSpawn = 0;
+  let lastScoreUpdate = 0;
+  let score = 0;
+  let coins = 0;
+  let hitsTaken = 0;
+
+  // Joystick vars
+  let joystickActive = false;
+  let joystickStart = { x: 0, y: 0 };
+  let joystickPos = { x: 0, y: 0 };
+  let joystickMove = { x: 0, y: 0 };
+
+  // Helper functions
+  function clamp(n, min, max) { return Math.max(min, Math.min(max, n)); }
+  function dist(x1, y1, x2, y2) {
+    return Math.hypot(x2 - x1, y2 - y1);
+  }
+  function rectsCollide(r1, r2) {
+    return r1.x < r2.x + r2.size &&
+           r1.x + r1.size > r2.x &&
+           r1.y < r2.y + r2.size &&
+           r1.y + r1.size > r2.y;
+  }
+
+  // Spawn enemy from random side toward player
+  function spawnEnemy() {
+    const side = Math.floor(Math.random() * 4);
+    const size = 20 + Math.random() * 15;
+    let x, y;
+
+    if (side === 0) { // top
+      x = Math.random() * (W - size);
+      y = -size;
+    } else if (side === 1) { // right
+      x = W + size;
+      y = Math.random() * (H - size);
+    } else if (side === 2) { // bottom
+      x = Math.random() * (W - size);
+      y = H + size;
+    } else { // left
+      x = -size;
+      y = Math.random() * (H - size);
+    }
+
+    const px = player.x + player.size / 2;
+    const py = player.y + player.size / 2;
+
+    const angle = Math.atan2(py - y, px - x);
+    const speed = difficulties[difficulty].enemySpeed;
+
+    enemies.push({
+      x, y, size,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      color: '#f33'
+    });
+  }
+
+  // Particle for death effect
+  function createParticles(x, y, count=30) {
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = Math.random() * 5 + 2;
+      particles.push({
+        x, y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        alpha: 1,
+        size: Math.random() * 4 + 2,
+        color: 'lime'
+      });
+    }
+  }
+
+  // Game functions
+  function resetGame() {
+    player.x = W/2 - player.size/2;
+    player.y = H/2 - player.size/2;
+    player.health = player.maxHealth;
+    player.alive = true;
+    enemies = [];
+    particles = [];
+    score = 0;
+    coins = 0;
+    hitsTaken = 0;
+    lastSpawn = performance.now();
+    lastScoreUpdate = performance.now();
+    ui.style.display = 'block';
+    deathScreen.style.display = 'none';
+  }
+
+  function gameOver() {
+    player.alive = false;
+    createParticles(player.x + player.size/2, player.y + player.size/2, 40);
+    setTimeout(() => {
+      deathScreen.style.display = 'flex';
+      finalScoreSpan.textContent = score;
+      finalCoinsSpan.textContent = coins;
+      ui.style.display = 'none';
+    }, 500);
+  }
+
+  // Input handlers
+  window.addEventListener('keydown', e => {
+    if (player.alive) keys[e.key.toLowerCase()] = true;
+  });
+  window.addEventListener('keyup', e => {
+    keys[e.key.toLowerCase()] = false;
+  });
+
+  // Joystick setup for mobile
+  function isMobile() {
+    return /Android|iPhone|iPad|iPod|Opera Mini|IEMobile|WPDesktop/i.test(navigator.userAgent);
+  }
+
+  function initJoystick() {
+    joystickContainer.style.display = 'block';
+
+    joystickContainer.addEventListener('touchstart', e => {
+      e.preventDefault();
+      joystickActive = true;
+      const touch = e.targetTouches[0];
+      joystickStart.x = touch.clientX;
+      joystickStart.y = touch.clientY;
+      joystickPos.x = joystickStart.x;
+      joystickPos.y = joystickStart.y;
+      updateJoystickVisual();
+    });
+
+    joystickContainer.addEventListener('touchmove', e => {
+      if (!joystickActive) return;
+      e.preventDefault();
+      const touch = e.targetTouches[0];
+      let dx = touch.clientX - joystickStart.x;
+      let dy = touch.clientY - joystickStart.y;
+      const maxDist = 50;
+      const distTouch = Math.min(maxDist, Math.hypot(dx, dy));
+      const angle = Math.atan2(dy, dx);
+      joystickMove.x = Math.cos(angle) * (distTouch / maxDist);
+      joystickMove.y = Math.sin(angle) * (distTouch / maxDist);
+
+      joystickPos.x = joystickStart.x + joystickMove.x * maxDist;
+      joystickPos.y = joystickStart.y + joystickMove.y * maxDist;
+
+      updateJoystickVisual();
+    });
+
+    joystickContainer.addEventListener('touchend', e => {
+      joystickActive = false;
+      joystickMove.x = 0;
+      joystickMove.y = 0;
+      updateJoystickVisual();
+    });
+  }
+
+  function updateJoystickVisual() {
+    joystickInner.style.transform = `translate(${(joystickPos.x - joystickStart.x) || 0}px, ${(joystickPos.y - joystickStart.y) || 0}px)`;
+  }
+
+  // Update function
+  function update() {
+    if (!player.alive) {
+      // particles fade
+      for (let i = particles.length -1; i >=0; i--) {
+        const p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.alpha -= 0.03;
+        if (p.alpha <= 0) particles.splice(i, 1);
+      }
+      return;
+    }
+
+    // Player movement (keyboard)
+    let moveX = 0;
+    let moveY = 0;
+    if (keys['a'] || keys['arrowleft']) moveX -= player.speed;
+    if (keys['d'] || keys['arrowright']) moveX += player.speed;
+    if (keys['w'] || keys['arrowup']) moveY -= player.speed;
+    if (keys['s'] || keys['arrowdown']) moveY += player.speed;
+
+    // Player movement (joystick)
+    moveX += joystickMove.x * player.speed;
+    moveY += joystickMove.y * player.speed;
+
+    player.x = clamp(player.x + moveX, 0, W - player.size);
+    player.y = clamp(player.y + moveY, 0, H - player.size);
+
+    // Spawn enemies by timer
+    let now = performance.now();
+    if (now - lastSpawn > difficulties[difficulty].spawnInterval) {
+      spawnEnemy();
+      lastSpawn = now;
+    }
+
+    // Move enemies
+    for (let i = enemies.length -1; i >= 0; i--) {
+      let e = enemies[i];
+      e.x += e.vx;
+      e.y += e.vy;
+
+      // Remove if out of bounds + margin
+      if (e.x < -50 || e.x > W + 50 || e.y < -50 || e.y > H + 50) {
+        enemies.splice(i, 1);
+        continue;
+      }
+
+      // Collision with player
+      if (rectsCollide(player, e)) {
+        enemies.splice(i, 1);
+        hitsTaken++;
+        // flash red effect
+        flashScreen();
+
+        if (hitsTaken >= 5) {
+          gameOver();
+        }
+      }
+    }
+
+    // Update score & coins per second
+    if (now - lastScoreUpdate > 1000) {
+      score += difficulties[difficulty].scorePerSec;
+      lastScoreUpdate = now;
+
+      coins += Math.floor(difficulties[difficulty].scorePerSec / 10) * difficulties[difficulty].coinMult;
+    }
+  }
+
+  // Draw everything
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+
+    // Draw player
+    if (player.alive) {
+      ctx.fillStyle = '#0f0';
+      ctx.fillRect(player.x, player.y, player.size, player.size);
+    }
+
+    // Draw enemies
+    enemies.forEach(e => {
+      ctx.fillStyle = e.color;
+      ctx.fillRect(e.x, e.y, e.size, e.size);
+    });
+
+    // Draw particles
+    particles.forEach(p => {
+      ctx.fillStyle = `rgba(0,255,0,${p.alpha})`;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
+
+  // Flash red screen on hit
+  let flashTimeout = null;
+  function flashScreen() {
+    document.body.style.backgroundColor = 'rgba(255,0,0,0.5)';
+    clearTimeout(flashTimeout);
+    flashTimeout = setTimeout(() => {
+      document.body.style.backgroundColor = '#121212';
+    }, 80);
+  }
+
+  // Buttons events
+  diffBtns.forEach(btn => {
+    btn.onclick = () => {
+      difficulty = btn.dataset.diff;
+      diffBtns.forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      difficultyText.textContent = difficulty;
+    };
+  });
+
+  playBtn.onclick = () => {
+    menu.style.display = 'none';
+    resetGame();
+    if (isMobile()) {
+      initJoystick();
+    } else {
+      joystickContainer.style.display = 'none';
+    }
+  };
+
+  restartBtn.onclick = () => {
+    deathScreen.style.display = 'none';
+    resetGame();
+  };
+
+  mainMenuBtn.onclick = () => {
+    deathScreen.style.display = 'none';
+    menu.style.display = 'block';
+  };
+
+  // Main game loop
+  function loop() {
+    update();
+    draw();
+    updateUI();
+    requestAnimationFrame(loop);
+  }
+
+  // Update UI values
+  function updateUI() {
+    healthSpan.textContent = player.maxHealth - hitsTaken;
+    scoreSpan.textContent = score;
+    coinsSpan.textContent = coins;
+  }
+
+  // Start game loop
+  loop();
+
+})();
+</script>
+
+</body>
+</html>
