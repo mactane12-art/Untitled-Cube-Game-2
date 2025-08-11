@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Untitled Cube Game - All sides enemies</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; overflow: hidden; background: #121212; color: #eee;
+    font-family: Arial, sans-serif;
+    user-select: none;
+  }
+  canvas {
+    display: block;
+    background: #222;
+    margin: 0 auto;
+  }
+  #ui {
+    position: fixed;
+    top: 10px; left: 10px;
+    font-size: 18px;
+    background: rgba(0,0,0,0.6);
+    padding: 8px 12px;
+    border-radius: 8px;
+    user-select: none;
+    z-index: 10;
+  }
+  #deathOverlay.hit {
+    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+    background: rgba(255,0,0,0.6);
+    pointer-events: none;
+    animation: flash 0.08s ease-out;
+    z-index: 20;
+  }
+  @keyframes flash {
+    from { opacity: 1; }
+    to { opacity: 0; }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="gameCanvas"></canvas>
+
+<div id="ui">
+  <span>❤️ Health: <span id="health">5</span></span> &nbsp;&nbsp;
+  <span>⭐ Score: <span id="score">0</span></span> &nbsp;&nbsp;
+  <span>🪙 Coins: <span id="coins">0</span></span> &nbsp;&nbsp;
+  <span>🎚 Difficulty: <span id="difficultyText">easy</span></span>
+</div>
+
+<div id="deathOverlay"></div>
+
+<script>
+(() => {
+  const canvas = document.getElementById("gameCanvas");
+  const ctx = canvas.getContext("2d");
+
+  let W, H;
+  function resize() {
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = W;
+    canvas.height = H;
+  }
+  window.addEventListener("resize", resize);
+  resize();
+
+  const ui = document.getElementById("ui");
+  const healthSpan = document.getElementById("health");
+  const scoreSpan = document.getElementById("score");
+  const coinsSpan = document.getElementById("coins");
+  const difficultyText = document.getElementById("difficultyText");
+  const deathOverlay = document.getElementById("deathOverlay");
+
+  // Player setup
+  const player = {
+    size: 30,
+    x: W / 2 - 15,
+    y: H / 2 - 15,
+    speed: 5,
+    health: 5,
+    maxHealth: 5,
+  };
+
+  let keys = {};
+  window.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
+  window.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
+
+  // Enemies array
+  let enemies = [];
+
+  // Difficulty config
+  let difficulty = "easy"; // can be easy, medium, hard
+  const difficulties = {
+    easy: { spawnInterval: 2000, enemySpeed: 1.5, scorePerSec: 1, coinMult: 1 },
+    medium: { spawnInterval: 1200, enemySpeed: 3.5, scorePerSec: 3, coinMult: 2 },
+    hard: { spawnInterval: 600, enemySpeed: 7, scorePerSec: 8, coinMult: 4 }
+  };
+
+  // Game state
+  let lastSpawnTime = 0;
+  let lastScoreTime = 0;
+  let score = 0;
+  let coins = 0;
+  let hitsTaken = 0;
+  const MAX_HITS = 5;
+
+  // Joystick support (basic)
+  let joystickPos = { x: 0, y: 0 };
+  // For now, keyboard only, you can add joystick later
+
+  // Helper functions
+  function clamp(n, min, max) { return Math.max(min, Math.min(max, n)); }
+  function rectsCollide(r1, r2) {
+    return r1.x < r2.x + r2.size &&
+           r1.x + r1.size > r2.x &&
+           r1.y < r2.y + r2.size &&
+           r1.y + r1.size > r2.y;
+  }
+
+  // Spawn enemy from random side toward player center
+  function spawnEnemy() {
+    const side = Math.floor(Math.random() * 4);
+    const size = 20 + Math.random() * 10;
+    let x, y;
+    const px = player.x + player.size / 2;
+    const py = player.y + player.size / 2;
+
+    if (side === 0) { // top
+      x = Math.random() * (W - size);
+      y = -size;
+    } else if (side === 1) { // right
+      x = W + size;
+      y = Math.random() * (H - size);
+    } else if (side === 2) { // bottom
+      x = Math.random() * (W - size);
+      y = H + size;
+    } else { // left
+      x = -size;
+      y = Math.random() * (H - size);
+    }
+
+    // velocity toward player center
+    const angle = Math.atan2(py - y, px - x);
+    const speed = difficulties[difficulty].enemySpeed;
+    const vx = Math.cos(angle) * speed;
+    const vy = Math.sin(angle) * speed;
+
+    enemies.push({ x, y, size, vx, vy, color: "#f00" });
+  }
+
+  function update() {
+    const now = performance.now();
+
+    // Spawn enemies by difficulty timer
+    if (now - lastSpawnTime > difficulties[difficulty].spawnInterval) {
+      spawnEnemy();
+      lastSpawnTime = now;
+    }
+
+    // Move player
+    let moveX = 0, moveY = 0;
+    if (keys["a"] || keys["arrowleft"]) moveX -= player.speed;
+    if (keys["d"] || keys["arrowright"]) moveX += player.speed;
+    if (keys["w"] || keys["arrowup"]) moveY -= player.speed;
+    if (keys["s"] || keys["arrowdown"]) moveY += player.speed;
+
+    player.x = clamp(player.x + moveX, 0, W - player.size);
+    player.y = clamp(player.y + moveY, 0, H - player.size);
+
+    // Update enemies
+    for (let i = enemies.length -1; i >=0; i--) {
+      let e = enemies[i];
+      e.x += e.vx;
+      e.y += e.vy;
+
+      // Remove enemies out of bounds + small margin
+      if (e.x < -50 || e.x > W + 50 || e.y < -50 || e.y > H + 50) {
+        enemies.splice(i,1);
+        continue;
+      }
+
+      // Check collision with player
+      if (rectsCollide(player, e)) {
+        enemies.splice(i,1);
+        hitsTaken++;
+        deathOverlay.classList.add("hit");
+        setTimeout(() => deathOverlay.classList.remove("hit"), 80);
+
+        if (hitsTaken >= MAX_HITS) {
+          gameOver();
+        }
+      }
+    }
+
+    // Update score and coins every second
+    if (now - lastScoreTime > 1000) {
+      score += difficulties[difficulty].scorePerSec;
+      lastScoreTime = now;
+
+      // 10 score = 1 coin, multiplied by difficulty
+      coins += Math.floor(difficulties[difficulty].scorePerSec / 10) * difficulties[difficulty].coinMult;
+    }
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+
+    // Draw player
+    ctx.fillStyle = "#0f0";
+    ctx.fillRect(player.x, player.y, player.size, player.size);
+
+    // Draw enemies
+    for (const e of enemies) {
+      ctx.fillStyle = e.color;
+      ctx.fillRect(e.x, e.y, e.size, e.size);
+    }
+  }
+
+  function gameOver() {
+    alert(`Game over! Your score: ${score} | Coins earned: ${coins}`);
+    resetGame();
+  }
+
+  function resetGame() {
+    player.x = W / 2 - player.size / 2;
+    player.y = H / 2 - player.size / 2;
+    hitsTaken = 0;
+    score = 0;
+    coins = 0;
+    enemies = [];
+  }
+
+  function updateUI() {
+    healthSpan.textContent = MAX_HITS - hitsTaken;
+    scoreSpan.textContent = score;
+    coinsSpan.textContent = coins;
+    difficultyText.textContent = difficulty;
+  }
+
+  function gameLoop() {
+    update();
+    draw();
+    updateUI();
+    requestAnimationFrame(gameLoop);
+  }
+
+  resetGame();
+  gameLoop();
+
+})();
+</script>
+
+</body>
+</html>
