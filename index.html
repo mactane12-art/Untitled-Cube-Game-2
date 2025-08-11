@@ -1,0 +1,972 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Untitled Cube Game</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; overflow: hidden; background: #111; color: #eee; font-family: Arial, sans-serif;
+    user-select: none;
+  }
+  #gameCanvas {
+    display: block;
+    background: #222;
+  }
+  #ui {
+    position: absolute; top: 10px; left: 10px; color: #eee; font-weight: bold;
+    display: flex; gap: 15px; font-size: 18px;
+  }
+  button {
+    font-size: 16px; padding: 6px 12px; cursor: pointer; border-radius: 5px; border: none;
+    background: #444; color: #eee;
+  }
+  button:hover:not(:disabled) {
+    background: #666;
+  }
+  button:disabled {
+    background: #222; color: #666; cursor: default;
+  }
+  #menu, #storeScreen, #deathScreen, #pauseMenu {
+    position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
+    background: rgba(20,20,20,0.9); color: #eee;
+    display: flex; flex-direction: column; justify-content: center; align-items: center;
+    font-size: 24px;
+    gap: 15px;
+    z-index: 10;
+  }
+  .hidden {
+    display: none !important;
+  }
+  #difficultyButtons button.selected {
+    background: #0a0;
+    color: #fff;
+  }
+  #joystickContainer {
+    position: fixed; bottom: 20px; left: 20px; width: 60px; height: 60px;
+    background: rgba(255,255,255,0.15); border-radius: 50%; touch-action: none;
+    display: none;
+    z-index: 15;
+  }
+  #joystickInner {
+    position: absolute; top: 15px; left: 15px; width: 30px; height: 30px;
+    background: rgba(255,255,255,0.4); border-radius: 50%;
+    transition: transform 0.1s;
+  }
+  #shootBtn {
+    position: fixed; bottom: 30px; right: 30px;
+    width: 70px; height: 70px;
+    border-radius: 50%;
+    background: #f33;
+    border: none;
+    color: white;
+    font-size: 18px;
+    display: none;
+    z-index: 15;
+    user-select: none;
+  }
+</style>
+</head>
+<body>
+
+<canvas id="gameCanvas"></canvas>
+
+<div id="ui" style="display:none;">
+  <div>Health: <span id="healthSpan">5</span></div>
+  <div>Score: <span id="scoreSpan">0</span></div>
+  <div>Coins: <span id="coinsSpan">0</span></div>
+  <div>Difficulty: <span id="difficultyText">easy</span></div>
+  <div>Seconds: <span id="secondsSpan">0</span></div>
+  <div>Rebirths: <span id="rebirthsSpan">0</span></div>
+</div>
+
+<div id="menu">
+  <h1>Untitled Cube Game</h1>
+  <div id="difficultyButtons">
+    <button data-diff="easy" class="selected">Easy</button>
+    <button data-diff="medium">Medium</button>
+    <button data-diff="hard">Hard</button>
+    <button data-diff="demon">Demon</button>
+  </div>
+  <button id="playBtn">Play</button>
+  <button id="storeBtn">Store</button>
+</div>
+
+<div id="storeScreen" class="hidden">
+  <h2>Store</h2>
+  <div>Coins: <span id="storeCoinsSpan">0</span></div>
+  <div id="storeItems"></div>
+  <button id="rebirthBtn" disabled>Rebirth</button>
+  <button id="backToMenuBtn">Back</button>
+</div>
+
+<div id="deathScreen" class="hidden">
+  <h2>Game Over</h2>
+  <div>Score: <span id="finalScoreSpan">0</span></div>
+  <div>Coins: <span id="finalCoinsSpan">0</span></div>
+  <div>Rebirths: <span id="finalRebirthsSpan">0</span></div>
+  <button id="restartBtn">Restart</button>
+  <button id="mainMenuBtn">Main Menu</button>
+</div>
+
+<div id="pauseMenu" class="hidden" style="flex-direction: column; gap: 10px;">
+  <h2>Paused</h2>
+  <button id="pauseRestartBtn">Restart</button>
+  <button id="pauseMainMenuBtn">Main Menu</button>
+</div>
+
+<div id="joystickContainer">
+  <div id="joystickInner"></div>
+</div>
+<button id="shootBtn">Shoot</button>
+
+<button id="pauseBtn" style="position: fixed; top: 10px; right: 10px; z-index: 15; display:none;">Pause</button>
+
+<script>
+(() => {
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+  const W = window.innerWidth;
+  const H = window.innerHeight;
+  canvas.width = W;
+  canvas.height = H;
+
+  const ui = document.getElementById('ui');
+  const healthSpan = document.getElementById('healthSpan');
+  const scoreSpan = document.getElementById('scoreSpan');
+  const coinsSpan = document.getElementById('coinsSpan');
+  const difficultyText = document.getElementById('difficultyText');
+  const secondsSpan = document.getElementById('secondsSpan');
+  const rebirthsSpan = document.getElementById('rebirthsSpan');
+
+  const menu = document.getElementById('menu');
+  const storeScreen = document.getElementById('storeScreen');
+  const storeCoinsSpan = document.getElementById('storeCoinsSpan');
+  const storeItemsDiv = document.getElementById('storeItems');
+  const rebirthBtn = document.getElementById('rebirthBtn');
+  const backToMenuBtn = document.getElementById('backToMenuBtn');
+
+  const deathScreen = document.getElementById('deathScreen');
+  const finalScoreSpan = document.getElementById('finalScoreSpan');
+  const finalCoinsSpan = document.getElementById('finalCoinsSpan');
+  const finalRebirthsSpan = document.getElementById('finalRebirthsSpan');
+  const restartBtn = document.getElementById('restartBtn');
+  const mainMenuBtn = document.getElementById('mainMenuBtn');
+
+  const pauseMenu = document.getElementById('pauseMenu');
+  const pauseRestartBtn = document.getElementById('pauseRestartBtn');
+  const pauseMainMenuBtn = document.getElementById('pauseMainMenuBtn');
+  const pauseBtn = document.getElementById('pauseBtn');
+
+  const playBtn = document.getElementById('playBtn');
+  const storeBtn = document.getElementById('storeBtn');
+
+  const joystickContainer = document.getElementById('joystickContainer');
+  const joystickInner = document.getElementById('joystickInner');
+  const shootBtn = document.getElementById('shootBtn');
+
+  const difficulties = {
+    easy: { enemiesPerSec: 1, enemySpeed: 1.5, scorePerSec: 1, coinInterval: 30000 },
+    medium: { enemiesPerSec: 2, enemySpeed: 2, scorePerSec: 2, coinInterval: 25000 },
+    hard: { enemiesPerSec: 4, enemySpeed: 3, scorePerSec: 5, coinInterval: 5000 },
+    demon: { enemiesPerSec: 15, enemySpeed: 5, scorePerSec: 10, coinInterval: 1000 }
+  };
+
+  let difficulty = 'easy';
+  let keys = {};
+  let player = {
+    x: W / 2 - 20,
+    y: H / 2 - 20,
+    size: 40,
+    speed: 5,
+    health: 5,
+    maxHealth: 5,
+    alive: true,
+    skinColor: '#0f0',
+    hasGun: false
+  };
+
+  let enemies = [];
+  let particles = [];
+  let bgParticles = [];
+  let score = 0;
+  let coins = 0;
+  let hitsTaken = 0;
+  let secondsPlayed = 0;
+  let rebirths = 0;
+
+  let lastSpawn = 0;
+  let lastBossSpawn = -999999;
+  let lastScoreUpdate = 0;
+  let lastAutoCoin = 0;
+  let lastAutoGunShot = 0;
+  let lastHitTime = 0;
+
+  let paused = false;
+  let shootTarget = null;
+
+  // joystick variables
+  let joystickActive = false;
+  let joystickStart = { x: 0, y: 0 };
+  let joystickPos = { x: 0, y: 0 };
+  let joystickMove = { x: 0, y: 0 };
+
+  // Store items example, unlockAt is rebirths needed to unlock item
+  const storeItemsData = [
+    { id: 'speedBoost', name: 'Speed Boost', cost: 50, type: 'powerup', unlockAt: 0 },
+    { id: 'extraHealth', name: 'Extra Health', cost: 100, type: 'powerup', unlockAt: 1 },
+    { id: 'superSpeed', name: 'Super Speed', cost: 200, type: 'powerup', unlockAt: 2 },
+    { id: 'extraHealth2', name: 'Extra Health II', cost: 400, type: 'powerup', unlockAt: 3 },
+    { id: 'megaSpeed', name: 'Mega Speed', cost: 800, type: 'powerup', unlockAt: 5 },
+    { id: 'extraHealth3', name: 'Extra Health III', cost: 1600, type: 'powerup', unlockAt: 7 },
+    { id: 'ultraSpeed', name: 'Ultra Speed', cost: 3200, type: 'powerup', unlockAt: 10 },
+    { id: 'extraHealth4', name: 'Extra Health IV', cost: 6400, type: 'powerup', unlockAt: 15 },
+    { id: 'ultimateGun', name: 'Ultimate Gun', cost: 0, type: 'special', unlockAt: 20 },
+  ];
+
+  const inventory = new Set();
+
+  function clamp(v, min, max) { return Math.min(Math.max(v, min), max); }
+
+  // Rect collision
+  function rectsCollide(a, b) {
+    return a.x < b.x + b.size && a.x + a.size > b.x &&
+           a.y < b.y + b.size && a.y + a.size > b.y;
+  }
+
+  // Spawn enemy from random side going toward player
+  function spawnEnemy() {
+    const side = Math.floor(Math.random() * 4);
+    const size = 30;
+    let x, y;
+
+    if (side === 0) { // top
+      x = Math.random() * (W - size);
+      y = -size;
+    } else if (side === 1) { // right
+      x = W + size;
+      y = Math.random() * (H - size);
+    } else if (side === 2) { // bottom
+      x = Math.random() * (W - size);
+      y = H + size;
+    } else { // left
+      x = -size;
+      y = Math.random() * (H - size);
+    }
+
+    const px = player.x + player.size / 2;
+    const py = player.y + player.size / 2;
+
+    const angle = Math.atan2(py - y, px - x);
+    const speed = difficulties[difficulty].enemySpeed;
+
+    enemies.push({
+      x, y,
+      size,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      color: '#f00',
+      isBoss: false,
+    });
+  }
+
+  // Spawn boss with cooldown and rarity
+  function spawnBoss() {
+    const now = performance.now();
+    if (now - lastBossSpawn < 90000) return; // 90 sec cooldown
+
+    if (Math.random() > 0.05) return; // 5% chance
+
+    lastBossSpawn = now;
+
+    // Spawn boss in random side, big size
+    const side = Math.floor(Math.random() * 4);
+    const size = 70;
+    let x, y;
+
+    if (side === 0) { // top
+      x = Math.random() * (W - size);
+      y = -size;
+    } else if (side === 1) { // right
+      x = W + size;
+      y = Math.random() * (H - size);
+    } else if (side === 2) { // bottom
+      x = Math.random() * (W - size);
+      y = H + size;
+    } else { // left
+      x = -size;
+      y = Math.random() * (H - size);
+    }
+
+    const px = player.x + player.size / 2;
+    const py = player.y + player.size / 2;
+
+    const angle = Math.atan2(py - y, px - x);
+    const speed = difficulties[difficulty].enemySpeed * 0.7;
+
+    enemies.push({
+      x, y,
+      size,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      color: '#f80',
+      isBoss: true,
+      health: 20,
+    });
+  }
+
+  // Create particles effect at x,y
+  function createParticles(x, y, count, color) {
+    for(let i=0; i<count; i++) {
+      particles.push({
+        x: x + (Math.random() - 0.5) * 20,
+        y: y + (Math.random() - 0.5) * 20,
+        vx: (Math.random() - 0.5) * 4,
+        vy: (Math.random() - 0.5) * 4,
+        alpha: 1,
+        size: 5,
+        color,
+      });
+    }
+  }
+
+  // Explode player cubes on death
+  function playerExplosion() {
+    for(let i=0; i<30; i++) {
+      particles.push({
+        x: player.x + player.size/2 + (Math.random()-0.5)*player.size,
+        y: player.y + player.size/2 + (Math.random()-0.5)*player.size,
+        vx: (Math.random()-0.5)*8,
+        vy: (Math.random()-0.5)*8,
+        alpha: 1,
+        size: 6,
+        color: '#f33',
+      });
+    }
+  }
+
+  // Game over handler
+  function gameOver() {
+    player.alive = false;
+    playerExplosion();
+    setTimeout(() => {
+      deathScreen.style.display = 'flex';
+      finalScoreSpan.textContent = score;
+      finalCoinsSpan.textContent = coins;
+      finalRebirthsSpan.textContent = rebirths;
+      ui.style.display = 'none';
+      pauseBtn.style.display = 'none';
+      shootBtn.style.display = 'none';
+    }, 400);
+  }
+
+  // Rebirth logic
+  function canRebirth() {
+    // must have bought all items unlocked at current rebirth level
+    const requiredItems = storeItemsData.filter(it => it.unlockAt <= rebirths && !it.special);
+    return requiredItems.every(it => inventory.has(it.id));
+  }
+
+  function doRebirth() {
+    if(!canRebirth()) {
+      alert("You must buy all items unlocked for your rebirth level to rebirth.");
+      return;
+    }
+    rebirths++;
+    score = 0;
+    coins = 0;
+    hitsTaken = 0;
+    secondsPlayed = 0;
+    player.health = player.maxHealth;
+    inventory.clear();
+    player.speed = 5;
+    player.maxHealth = 5;
+    player.skinColor = '#0f0';
+    player.hasGun = false;
+    enemies = [];
+    particles = [];
+    updateStore();
+    updateUI();
+    alert(`You rebirthed! You now have ${rebirths} rebirth${rebirths === 1 ? '' : 's'}. New items unlocked!`);
+  }
+
+  // Input handling
+  window.addEventListener('keydown', e => {
+    if(e.key === 'p' || e.key === 'P'){
+      if(paused) resumeGame();
+      else pauseGame();
+    }
+    keys[e.key.toLowerCase()] = true;
+  });
+  window.addEventListener('keyup', e => {
+    keys[e.key.toLowerCase()] = false;
+  });
+
+  // Joystick for mobile
+  function isMobile() {
+    return /Mobi|Android/i.test(navigator.userAgent);
+  }
+
+  function initJoystick() {
+    if(!isMobile()) {
+      joystickContainer.style.display = 'none';
+      shootBtn.style.display = 'none';
+      return;
+    }
+    joystickContainer.style.display = 'block';
+    shootBtn.style.display = player.hasGun ? 'block' : 'none';
+
+    joystickStart.x = joystickContainer.offsetLeft + joystickContainer.offsetWidth/2;
+    joystickStart.y = joystickContainer.offsetTop + joystickContainer.offsetHeight/2;
+    joystickPos.x = joystickStart.x;
+    joystickPos.y = joystickStart.y;
+
+    const maxDist = 40;
+
+    joystickContainer.addEventListener('touchstart', e => {
+      e.preventDefault();
+      joystickActive = true;
+      const t = e.targetTouches[0];
+      joystickPos.x = t.clientX;
+      joystickPos.y = t.clientY;
+      joystickMove.x = 0;
+      joystickMove.y = 0;
+      updateJoystickVisual();
+    });
+    joystickContainer.addEventListener('touchmove', e => {
+      if (!joystickActive) return;
+      e.preventDefault();
+      const t = e.targetTouches[0];
+      let dx = t.clientX - joystickStart.x;
+      let dy = t.clientY - joystickStart.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      if(dist > maxDist){
+        dx = dx / dist * maxDist;
+        dy = dy / dist * maxDist;
+      }
+      joystickPos.x = joystickStart.x + dx;
+      joystickPos.y = joystickStart.y + dy;
+      joystickMove.x = dx / maxDist;
+      joystickMove.y = dy / maxDist;
+      updateJoystickVisual();
+    });
+    joystickContainer.addEventListener('touchend', e => {
+      e.preventDefault();
+      joystickActive = false;
+      joystickMove.x = 0;
+      joystickMove.y = 0;
+      updateJoystickVisual();
+    });
+
+    shootBtn.addEventListener('touchstart', e => {
+      e.preventDefault();
+      shooting = true;
+    });
+    shootBtn.addEventListener('touchend', e => {
+      e.preventDefault();
+      shooting = false;
+    });
+  }
+
+  function updateJoystickVisual() {
+    joystickInner.style.transform = `translate(${joystickMove.x * 30}px, ${joystickMove.y * 30}px)`;
+  }
+
+  // Player move update
+  function updatePlayer(dt) {
+    if(!player.alive) return;
+    let dx = 0, dy = 0;
+    if(isMobile()){
+      dx = joystickMove.x * player.speed;
+      dy = joystickMove.y * player.speed;
+    } else {
+      if(keys['w'] || keys['arrowup']) dy -= player.speed;
+      if(keys['s'] || keys['arrowdown']) dy += player.speed;
+      if(keys['a'] || keys['arrowleft']) dx -= player.speed;
+      if(keys['d'] || keys['arrowright']) dx += player.speed;
+    }
+    player.x = clamp(player.x + dx, 0, W - player.size);
+    player.y = clamp(player.y + dy, 0, H - player.size);
+  }
+
+  // Shooting variables
+  let shooting = false;
+  let shootCooldown = 300;
+  let lastShootTime = 0;
+
+  // Shooting logic: click/tap to shoot towards pointer
+  function shoot(x, y) {
+    if(!player.hasGun || !player.alive) return;
+
+    const now = performance.now();
+    if(now - lastShootTime < shootCooldown) return;
+
+    lastShootTime = now;
+
+    // Bullets go toward target pos
+    const px = player.x + player.size/2;
+    const py = player.y + player.size/2;
+
+    const angle = Math.atan2(y - py, x - px);
+
+    bullets.push({
+      x: px,
+      y: py,
+      vx: Math.cos(angle) * 15,
+      vy: Math.sin(angle) * 15,
+      size: 8,
+      color: '#0ff',
+    });
+  }
+
+  // Bullets array
+  let bullets = [];
+
+  // Update bullets
+  function updateBullets(dt) {
+    for(let i = bullets.length - 1; i >= 0; i--) {
+      let b = bullets[i];
+      b.x += b.vx;
+      b.y += b.vy;
+
+      // Remove if out of screen
+      if(b.x < -10 || b.x > W + 10 || b.y < -10 || b.y > H + 10) {
+        bullets.splice(i, 1);
+        continue;
+      }
+
+      // Check collision with enemies
+      for(let j = enemies.length - 1; j >= 0; j--) {
+        let en = enemies[j];
+        if(rectsCollide(b, en)) {
+          if(en.isBoss) {
+            en.health--;
+            createParticles(en.x + en.size/2, en.y + en.size/2, 8, '#ff0');
+            if(en.health <= 0) {
+              enemies.splice(j, 1);
+              score += 20;
+              coins += 3;
+              updateStoreCoins();
+              player.hasGun = false;
+              shootBtn.style.display = 'none';
+            }
+          } else {
+            enemies.splice(j, 1);
+            score += 2;
+            coins += 1;
+            updateStoreCoins();
+          }
+          bullets.splice(i, 1);
+          break;
+        }
+      }
+    }
+  }
+
+  // Update function
+  function update(dt) {
+    if(paused) return;
+
+    updatePlayer(dt);
+    updateBullets(dt);
+
+    // Spawn enemies by difficulty rate
+    const now = performance.now();
+
+    if(now - lastSpawn > 1000 / difficulties[difficulty].enemiesPerSec) {
+      spawnEnemy();
+      lastSpawn = now;
+    }
+
+    spawnBoss();
+
+    // Move enemies
+    for(let i = enemies.length -1; i >= 0; i--) {
+      const en = enemies[i];
+      en.x += en.vx;
+      en.y += en.vy;
+
+      // Remove if off screen (past opposite side)
+      if(en.x < -100 || en.x > W + 100 || en.y < -100 || en.y > H + 100) {
+        enemies.splice(i, 1);
+        continue;
+      }
+
+      // Check collision with player
+      if(player.alive && rectsCollide(player, en)) {
+        if(en.isBoss) {
+          gameOver();
+          return;
+        } else {
+          const currentTime = performance.now();
+          if(currentTime - lastHitTime > 3000) { // 3 sec cooldown
+            player.health--;
+            hitsTaken++;
+            lastHitTime = currentTime;
+            createParticles(player.x + player.size/2, player.y + player.size/2, 15, 'red');
+            enemies.splice(i,1);
+            if(player.health <= 0) {
+              gameOver();
+              return;
+            }
+          }
+        }
+      }
+    }
+
+    // Auto coin gain based on difficulty interval
+    if(now - lastAutoCoin > difficulties[difficulty].coinInterval) {
+      coins++;
+      lastAutoCoin = now;
+      updateStoreCoins();
+    }
+
+    // Auto gun (unlocked at 20 rebirths)
+    if(rebirths >= 20 && player.hasGun) {
+      if(now - lastAutoGunShot > 5000) {
+        if(enemies.length > 0) {
+          // Shoot first enemy
+          const en = enemies[0];
+          createParticles(en.x + en.size/2, en.y + en.size/2, 15, '#fff');
+          score += 2;
+          coins += 1;
+          updateStoreCoins();
+          enemies.splice(0,1);
+        }
+        lastAutoGunShot = now;
+      }
+    }
+
+    // Update particles
+    for(let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      p.alpha -= 0.03;
+      if(p.alpha <= 0){
+        particles.splice(i,1);
+      }
+    }
+
+    // Update background particles
+    bgParticles.forEach(p => {
+      p.y += p.speed;
+      if(p.y > H) p.y = 0;
+    });
+
+    // Update score and seconds played
+    if(now - lastScoreUpdate > 1000){
+      score += difficulties[difficulty].scorePerSec * (1 + rebirths * 0.2);
+      secondsPlayed++;
+      lastScoreUpdate = now;
+    }
+
+    updateUI();
+  }
+
+  // Draw everything
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+
+    // Background white particles with 50% transparency
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    bgParticles.forEach(p => {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
+      ctx.fill();
+    });
+
+    // Draw player
+    if(player.alive){
+      ctx.fillStyle = player.skinColor;
+      ctx.fillRect(player.x, player.y, player.size, player.size);
+
+      // Health bar above player
+      ctx.fillStyle = '#f00';
+      ctx.fillRect(player.x, player.y - 10, player.size * (player.health/player.maxHealth), 5);
+      ctx.strokeStyle = '#555';
+      ctx.strokeRect(player.x, player.y - 10, player.size, 5);
+    }
+
+    // Draw enemies
+    enemies.forEach(en => {
+      ctx.fillStyle = en.color;
+      ctx.fillRect(en.x, en.y, en.size, en.size);
+      if(en.isBoss){
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(en.x, en.y - 10, en.size * (en.health / 20), 6);
+        ctx.strokeStyle = '#000';
+        ctx.strokeRect(en.x, en.y - 10, en.size, 6);
+      }
+    });
+
+    // Draw bullets
+    bullets.forEach(b => {
+      ctx.fillStyle = b.color;
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, b.size, 0, Math.PI*2);
+      ctx.fill();
+    });
+
+    // Draw particles
+    particles.forEach(p => {
+      ctx.fillStyle = `rgba(255,255,255,${p.alpha})`;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
+      ctx.fill();
+    });
+  }
+
+  // Main loop
+  let lastTime = performance.now();
+  function loop(){
+    const now = performance.now();
+    const dt = (now - lastTime) / 1000;
+    lastTime = now;
+
+    update(dt);
+    draw();
+
+    requestAnimationFrame(loop);
+  }
+
+  // UI update
+  function updateUI(){
+    healthSpan.textContent = player.health;
+    scoreSpan.textContent = Math.floor(score);
+    coinsSpan.textContent = coins;
+    difficultyText.textContent = difficulty;
+    secondsSpan.textContent = secondsPlayed;
+    rebirthsSpan.textContent = rebirths;
+  }
+
+  // Store update
+  function updateStore(){
+    storeCoinsSpan.textContent = coins;
+    storeItemsDiv.innerHTML = '';
+
+    storeItemsData.forEach(item => {
+      if(item.unlockAt > rebirths) return; // locked by rebirth
+      const owned = inventory.has(item.id);
+      const btn = document.createElement('button');
+      btn.textContent = `${item.name} - ${item.cost} coins` + (owned ? ' (Bought)' : '');
+      btn.disabled = owned || item.cost > coins;
+      btn.style.margin = '5px';
+      btn.addEventListener('click', () => {
+        if(coins >= item.cost) {
+          coins -= item.cost;
+          inventory.add(item.id);
+          applyItemEffects(item.id);
+          updateStore();
+          updateStoreCoins();
+          checkRebirthAvailability();
+        }
+      });
+      storeItemsDiv.appendChild(btn);
+    });
+  }
+
+  // Apply item effects on buy
+  function applyItemEffects(id) {
+    if(id === 'speedBoost') player.speed += 1;
+    else if(id === 'extraHealth') {
+      player.maxHealth += 1;
+      player.health = player.maxHealth;
+    }
+    else if(id === 'superSpeed') player.speed += 1.5;
+    else if(id === 'extraHealth2') {
+      player.maxHealth += 2;
+      player.health = player.maxHealth;
+    }
+    else if(id === 'megaSpeed') player.speed += 2;
+    else if(id === 'extraHealth3') {
+      player.maxHealth += 3;
+      player.health = player.maxHealth;
+    }
+    else if(id === 'ultraSpeed') player.speed += 2.5;
+    else if(id === 'extraHealth4') {
+      player.maxHealth += 5;
+      player.health = player.maxHealth;
+    }
+    else if(id === 'ultimateGun') {
+      player.hasGun = true;
+      shootBtn.style.display = 'block';
+      alert("Ultimate Gun unlocked! You can now shoot all enemies every 5 seconds automatically.");
+    }
+  }
+
+  function checkRebirthAvailability(){
+    rebirthBtn.disabled = !canRebirth();
+  }
+
+  // Reset game state for new game
+  function resetGame() {
+    player.x = W / 2 - player.size/2;
+    player.y = H / 2 - player.size/2;
+    player.health = player.maxHealth;
+    player.alive = true;
+    enemies = [];
+    particles = [];
+    bullets = [];
+    hitsTaken = 0;
+    score = 0;
+    secondsPlayed = 0;
+    lastSpawn = 0;
+    lastBossSpawn = -999999;
+    lastScoreUpdate = 0;
+    lastAutoCoin = 0;
+    lastAutoGunShot = 0;
+    lastHitTime = 0;
+    player.hasGun = rebirths >= 20 && inventory.has('ultimateGun');
+    shootBtn.style.display = player.hasGun && isMobile() ? 'block' : 'none';
+    ui.style.display = 'flex';
+    pauseBtn.style.display = 'block';
+  }
+
+  // Pause / Resume
+  function pauseGame(){
+    if(!player.alive) return;
+    paused = true;
+    pauseMenu.style.display = 'flex';
+    ui.style.display = 'none';
+    pauseBtn.style.display = 'none';
+    shootBtn.style.display = 'none';
+  }
+  function resumeGame(){
+    paused = false;
+    pauseMenu.style.display = 'none';
+    ui.style.display = 'flex';
+    pauseBtn.style.display = 'block';
+    if(player.hasGun && isMobile()) shootBtn.style.display = 'block';
+  }
+
+  // Event Listeners
+  playBtn.addEventListener('click', () => {
+    menu.style.display = 'none';
+    storeScreen.style.display = 'none';
+    deathScreen.style.display = 'none';
+    pauseMenu.style.display = 'none';
+    resetGame();
+  });
+
+  storeBtn.addEventListener('click', () => {
+    menu.style.display = 'none';
+    storeScreen.style.display = 'flex';
+    deathScreen.style.display = 'none';
+    pauseMenu.style.display = 'none';
+    updateStore();
+  });
+
+  backToMenuBtn.addEventListener('click', () => {
+    storeScreen.style.display = 'none';
+    menu.style.display = 'flex';
+  });
+
+  rebirthBtn.addEventListener('click', () => {
+    if(confirm("Are you sure you want to rebirth? You must have bought all items unlocked for your current rebirth level.")){
+      doRebirth();
+      storeScreen.style.display = 'none';
+      menu.style.display = 'flex';
+    }
+  });
+
+  restartBtn.addEventListener('click', () => {
+    deathScreen.style.display = 'none';
+    resetGame();
+  });
+
+  mainMenuBtn.addEventListener('click', () => {
+    deathScreen.style.display = 'none';
+    menu.style.display = 'flex';
+  });
+
+  pauseRestartBtn.addEventListener('click', () => {
+    pauseMenu.style.display = 'none';
+    resetGame();
+    paused = false;
+    ui.style.display = 'flex';
+    pauseBtn.style.display = 'block';
+    if(player.hasGun && isMobile()) shootBtn.style.display = 'block';
+  });
+
+  pauseMainMenuBtn.addEventListener('click', () => {
+    pauseMenu.style.display = 'none';
+    menu.style.display = 'flex';
+    paused = false;
+  });
+
+  pauseBtn.addEventListener('click', () => {
+    if(paused) resumeGame();
+    else pauseGame();
+  });
+
+  // Difficulty selection buttons
+  document.querySelectorAll('#difficultyButtons button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      difficulty = btn.getAttribute('data-diff');
+      document.querySelectorAll('#difficultyButtons button').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      difficultyText.textContent = difficulty;
+    });
+  });
+
+  // Mouse/touch shoot
+  canvas.addEventListener('click', e => {
+    if(player.hasGun && player.alive && !paused) {
+      shoot(e.clientX, e.clientY);
+    }
+  });
+
+  // Mobile shoot button click
+  shootBtn.addEventListener('click', e => {
+    e.preventDefault();
+    if(player.alive && !paused) {
+      // Shoot toward center of screen (or last touch)
+      shoot(player.x + player.size/2, player.y - 100);
+    }
+  });
+
+  // Background white particles init
+  function initBgParticles() {
+    bgParticles = [];
+    for(let i = 0; i < 100; i++){
+      bgParticles.push({
+        x: Math.random() * W,
+        y: Math.random() * H,
+        size: 2 + Math.random()*2,
+        speed: 0.3 + Math.random() * 0.5,
+      });
+    }
+  }
+
+  // Initialize joystick and UI at start
+  function init() {
+    ui.style.display = 'none';
+    pauseBtn.style.display = 'none';
+    shootBtn.style.display = 'none';
+    menu.style.display = 'flex';
+    storeScreen.style.display = 'none';
+    deathScreen.style.display = 'none';
+    pauseMenu.style.display = 'none';
+    difficultyText.textContent = difficulty;
+    rebirthsSpan.textContent = rebirths;
+    updateStore();
+    checkRebirthAvailability();
+    initJoystick();
+    initBgParticles();
+  }
+
+  // Start the game loop
+  function startLoop() {
+    lastTime = performance.now();
+    requestAnimationFrame(loop);
+  }
+
+  init();
+  startLoop();
+
+})();
+</script>
+
+</body>
+</html>
