@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>untitled cube game</title>
+<style>
+html, body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background: black;
+}
+canvas {
+    display: block;
+    background: black;
+}
+#joystickContainer {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    width: 120px;
+    height: 120px;
+}
+#shootButton {
+    position: absolute;
+    bottom: 40px;
+    right: 40px;
+    width: 80px;
+    height: 80px;
+    background: rgba(255,0,0,0.7);
+    border-radius: 50%;
+    border: none;
+}
+</style>
+</head>
+<body>
+<canvas id="gameCanvas"></canvas>
+<div id="joystickContainer"></div>
+<button id="shootButton"></button>
+<script src="https://cdn.jsdelivr.net/npm/nipplejs@0.9.0/dist/nipplejs.min.js"></script>
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+let player = { x: canvas.width/2, y: canvas.height/2, size: 20, speed: 4, color: 'white' };
+let enemies = [];
+let bullets = [];
+let particles = [];
+let coins = 0;
+let score = 0;
+let inGame = false;
+let mobileDirection = { x:0, y:0 };
+let shooting = false;
+
+function createParticles(){
+    for(let i=0;i<100;i++){
+        particles.push({
+            x: Math.random()*canvas.width,
+            y: Math.random()*canvas.height,
+            size: Math.random()*2+1,
+            speedY: Math.random()*0.5+0.2
+        });
+    }
+}
+
+function drawParticles(){
+    ctx.fillStyle = 'white';
+    for(let p of particles){
+        ctx.beginPath();
+        ctx.arc(p.x,p.y,p.size,0,Math.PI*2);
+        ctx.fill();
+        p.y += p.speedY;
+        if(p.y > canvas.height) p.y = 0;
+    }
+}
+
+function drawPlayer(){
+    ctx.fillStyle = player.color;
+    ctx.fillRect(player.x-player.size/2, player.y-player.size/2, player.size, player.size);
+}
+
+function drawEnemies(){
+    ctx.fillStyle = 'red';
+    for(let e of enemies){
+        ctx.fillRect(e.x-e.size/2, e.y-e.size/2, e.size, e.size);
+    }
+}
+
+function drawBullets(){
+    ctx.fillStyle = 'yellow';
+    for(let b of bullets){
+        ctx.fillRect(b.x-b.size/2, b.y-b.size/2, b.size, b.size);
+    }
+}
+
+function spawnEnemy(){
+    let side = Math.floor(Math.random()*4);
+    let x, y;
+    if(side==0){ x = 0; y = Math.random()*canvas.height; }
+    if(side==1){ x = canvas.width; y = Math.random()*canvas.height; }
+    if(side==2){ x = Math.random()*canvas.width; y = 0; }
+    if(side==3){ x = Math.random()*canvas.width; y = canvas.height; }
+    enemies.push({
+        x: x,
+        y: y,
+        size: 20,
+        speed: 2,
+    });
+}
+
+function update(){
+    if(inGame){
+        // move player
+        player.x += mobileDirection.x * player.speed;
+        player.y += mobileDirection.y * player.speed;
+
+        // keep in bounds
+        if(player.x<player.size/2) player.x=player.size/2;
+        if(player.x>canvas.width-player.size/2) player.x=canvas.width-player.size/2;
+        if(player.y<player.size/2) player.y=player.size/2;
+        if(player.y>canvas.height-player.size/2) player.y=canvas.height-player.size/2;
+
+        // move enemies
+        for(let e of enemies){
+            let dx = player.x - e.x;
+            let dy = player.y - e.y;
+            let dist = Math.hypot(dx,dy);
+            e.x += (dx/dist) * e.speed;
+            e.y += (dy/dist) * e.speed;
+        }
+
+        // move bullets
+        for(let b of bullets){
+            b.x += b.vx;
+            b.y += b.vy;
+        }
+
+        // collisions
+        for(let e of enemies){
+            for(let b of bullets){
+                if(Math.abs(e.x-b.x) < (e.size+b.size)/2 && Math.abs(e.y-b.y) < (e.size+b.size)/2){
+                    enemies.splice(enemies.indexOf(e),1);
+                    bullets.splice(bullets.indexOf(b),1);
+                    score += 1;
+                    if(score % 20 === 0) coins++;
+                    break;
+                }
+            }
+            if(Math.abs(e.x-player.x) < (e.size+player.size)/2 && Math.abs(e.y-player.y) < (e.size+player.size)/2){
+                inGame = false;
+            }
+        }
+    }
+}
+
+function draw(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    drawParticles();
+    if(inGame){
+        drawPlayer();
+        drawEnemies();
+        drawBullets();
+    } else {
+        ctx.fillStyle = 'white';
+        ctx.font = '40px sans-serif';
+        ctx.fillText('tap to start', canvas.width/2-100, canvas.height/2);
+    }
+}
+
+function loop(){
+    update();
+    draw();
+    requestAnimationFrame(loop);
+}
+
+canvas.addEventListener('click', () => {
+    if(!inGame){
+        inGame = true;
+        score = 0;
+        enemies = [];
+    }
+});
+
+setInterval(spawnEnemy, 1000);
+setInterval(()=>{
+    if(shooting && inGame){
+        let angle = Math.atan2(mobileDirection.y, mobileDirection.x);
+        if(mobileDirection.x===0 && mobileDirection.y===0) angle = 0;
+        bullets.push({
+            x: player.x,
+            y: player.y,
+            size: 6,
+            vx: Math.cos(angle)*6,
+            vy: Math.sin(angle)*6
+        });
+    }
+}, 200);
+
+createParticles();
+loop();
+
+// mobile joystick
+const joystick = nipplejs.create({
+    zone: document.getElementById('joystickContainer'),
+    mode: 'static',
+    position: {left: '60px', bottom: '60px'},
+    color: 'white'
+});
+
+joystick.on('move', (evt, data) => {
+    if(data.vector){
+        mobileDirection.x = data.vector.x;
+        mobileDirection.y = data.vector.y;
+    }
+});
+
+joystick.on('end', () => {
+    mobileDirection.x = 0;
+    mobileDirection.y = 0;
+});
+
+document.getElementById('shootButton').addEventListener('touchstart', ()=>{ shooting = true; });
+document.getElementById('shootButton').addEventListener('touchend', ()=>{ shooting = false; });
+</script>
+</body>
+</html>
