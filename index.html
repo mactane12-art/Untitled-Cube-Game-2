@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Untitled Cube Game with Store & Mobile Joystick</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    background: #121212;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    color: #eee;
+    user-select: none;
+  }
+  canvas {
+    display: block;
+    background: #222;
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 0;
+  }
+  #ui {
+    position: fixed;
+    top: 10px;
+    left: 10px;
+    background: rgba(0,0,0,0.6);
+    padding: 12px 18px;
+    border-radius: 12px;
+    font-size: 18px;
+    z-index: 10;
+    user-select: none;
+    display: flex;
+    gap: 18px;
+    align-items: center;
+  }
+  #ui span {
+    font-weight: 600;
+  }
+  #menu, #storeScreen {
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    background: #111;
+    padding: 30px 40px;
+    border-radius: 15px;
+    box-shadow: 0 0 15px #0f0;
+    text-align: center;
+    z-index: 20;
+    width: 360px;
+    max-height: 80vh;
+    overflow-y: auto;
+  }
+  #menu h1, #storeScreen h1 {
+    margin-bottom: 25px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+  }
+  .diff-btn {
+    cursor: pointer;
+    background: #333;
+    color: #eee;
+    border: none;
+    margin: 6px 8px;
+    padding: 12px 25px;
+    font-size: 18px;
+    border-radius: 10px;
+    transition: background 0.3s ease;
+    user-select: none;
+  }
+  .diff-btn.selected {
+    background: #0f0;
+    color: #121;
+    font-weight: 700;
+  }
+  #playBtn, #pauseBtn, #storeBtn, #backToMenuBtn, #rebirthBtn, #shootBtn {
+    margin-top: 25px;
+    font-size: 20px;
+    background: #0a0;
+    color: #cfc;
+    border: none;
+    padding: 14px 40px;
+    border-radius: 15px;
+    cursor: pointer;
+    user-select: none;
+    display: inline-block;
+    transition: background 0.3s ease;
+  }
+  #playBtn:hover, #pauseBtn:hover, #storeBtn:hover, #backToMenuBtn:hover, #rebirthBtn:hover, #shootBtn:hover {
+    background: #0f0;
+    color: #121;
+  }
+  #pauseBtn {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    background: #060;
+    padding: 10px 20px;
+    font-size: 16px;
+    z-index: 15;
+    display: none;
+  }
+  #deathScreen, #pauseMenu {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    background: rgba(20, 0, 0, 0.9);
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 30;
+    color: #f33;
+    opacity: 0;
+    transition: opacity 1.5s ease;
+  }
+  #deathScreen.visible, #pauseMenu.visible {
+    display: flex;
+    opacity: 1;
+  }
+  #deathScreen h2, #pauseMenu h2 {
+    font-size: 48px;
+    margin-bottom: 25px;
+    text-shadow: 0 0 10px #f00;
+  }
+  #deathScreen button, #pauseMenu button {
+    cursor: pointer;
+    font-size: 22px;
+    padding: 12px 28px;
+    margin: 10px;
+    border-radius: 15px;
+    border: none;
+    color: #eee;
+    background: #700;
+  }
+  #deathScreen button:hover, #pauseMenu button:hover {
+    background: #a00;
+  }
+  /* Joystick container */
+  #joystickContainer {
+    position: fixed;
+    bottom: 30px;
+    left: 30px;
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    background: rgba(255 255 255 / 0.12);
+    display: none;
+    touch-action: none;
+    z-index: 15;
+  }
+  #joystickInner {
+    position: absolute;
+    width: 60px; height: 60px;
+    top: 30px; left: 30px;
+    border-radius: 50%;
+    background: rgba(255 255 255 / 0.4);
+  }
+  #shootBtn {
+    position: fixed;
+    bottom: 30px;
+    right: 30px;
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    font-size: 20px;
+    display: none;
+    z-index: 15;
+  }
+  /* Store */
+  #storeScreen {
+    text-align: left;
+  }
+  #storeScreen h1 {
+    text-align: center;
+  }
+  .store-item {
+    margin: 12px 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .store-item button {
+    background: #0a0;
+    border: none;
+    padding: 6px 14px;
+    border-radius: 10px;
+    color: #cfc;
+    cursor: pointer;
+    font-weight: 600;
+    user-select: none;
+    transition: background 0.3s ease;
+  }
+  .store-item button:hover {
+    background: #0f0;
+    color: #121;
+  }
+</style>
+</head>
+<body>
+
+<canvas id="gameCanvas"></canvas>
+
+<div id="ui" style="display:none;">
+  ❤️ Health: <span id="health">5</span> &nbsp;&nbsp;
+  ⭐ Score: <span id="score">0</span> &nbsp;&nbsp;
+  🪙 Coins: <span id="coins">0</span> &nbsp;&nbsp;
+  ⏱ Seconds: <span id="seconds">0</span> &nbsp;&nbsp;
+  🎚 Difficulty: <span id="difficultyText">easy</span> &nbsp;&nbsp;
+  🔁 Rebirths: <span id="rebirthsSpan">0</span>
+</div>
+
+<button id="pauseBtn" title="Pause Game">Pause</button>
+<button id="shootBtn" title="Shoot">Shoot</button>
+
+<div id="menu">
+  <h1>Untitled Cube Game</h1>
+  <div>
+    <button class="diff-btn selected" data-diff="easy">Easy (1 enemy/sec)</button>
+    <button class="diff-btn" data-diff="medium">Medium (2 enemies/sec)</button>
+    <button class="diff-btn" data-diff="hard">Hard (4 enemies/sec)</button>
+    <button class="diff-btn" data-diff="demon">Demon (15 enemies/sec)</button>
+  </div>
+  <button id="playBtn">Play</button><br/>
+  <button id="storeBtn">Go to Store</button>
+</div>
+
+<div id="storeScreen" style="display:none;">
+  <h1>Store</h1>
+  <div>Coins: <span id="storeCoins">0</span></div>
+  <div id="storeItems"></div>
+  <button id="rebirthBtn" style="margin-top: 20px;">Rebirth</button><br/>
+  <button id="backToMenuBtn" style="margin-top: 15px;">Back to Menu</button>
+</div>
+
+<div id="deathScreen">
+  <h2>You Died!</h2>
+  <div>Your Score: <span id="finalScore">0</span></div>
+  <div>Your Coins: <span id="finalCoins">0</span></div>
+  <div>Your Rebirths: <span id="finalRebirths">0</span></div>
+  <div style="margin-top: 30px;">
+    <button id="restartBtn">Restart</button>
+    <button id="mainMenuBtn">Main Menu</button>
+  </div>
+</div>
+
+<div id="pauseMenu">
+  <h2>Game Paused</h2>
+  <div style="margin-top: 20px;">
+    <button id="pauseRestartBtn">Restart</button>
+    <button id="pauseMainMenuBtn">Main Menu</button>
+  </div>
+</div>
+
+<div id="joystickContainer">
+  <div id="joystickInner"></div>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+  let W, H;
+  function resize() {
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = W;
+    canvas.height = H;
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // UI elements
+  const ui = document.getElementById('ui');
+  const healthSpan = document.getElementById('health');
+  const scoreSpan = document.getElementById('score');
+  const coinsSpan = document.getElementById('coins');
+  const difficultyText = document.getElementById('difficultyText');
+  const secondsSpan = document.getElementById('seconds');
+  const rebirthsSpan = document.getElementById('rebirthsSpan');
+
+  const menu = document.getElementById('menu');
+  const playBtn = document.getElementById('playBtn');
+  const diffBtns = [...document.querySelectorAll('.diff-btn')];
+  const storeBtn = document.getElementById('storeBtn');
+
+  const storeScreen = document.getElementById('storeScreen');
+  const storeCoinsSpan = document.getElementById('storeCoins');
+  const storeItemsDiv = document.getElementById('storeItems');
+  const backToMenuBtn = document.getElementById('backToMenuBtn');
+  const rebirthBtn = document.getElementById('rebirthBtn');
+
+  const deathScreen = document.getElementById('deathScreen');
+  const finalScoreSpan = document.getElementById('finalScore');
+  const finalCoinsSpan = document.getElementById('finalCoins');
+  const finalRebirthsSpan = document.getElementById('finalRebirths');
+  const restartBtn = document.getElementById('restartBtn');
+  const mainMenuBtn = document.getElementById('mainMenuBtn');
+
+  const pauseBtn = document.getElementById('pauseBtn');
+  const pauseMenu = document.getElementById('pauseMenu');
+  const pauseRestartBtn = document.getElementById('pauseRestartBtn');
+  const pauseMainMenuBtn = document.getElementById('pauseMainMenuBtn');
+
+  const joystickContainer = document.getElementById('joystickContainer');
+  const joystickInner = document.getElementById('joystickInner');
+  const shootBtn = document.getElementById('shootBtn');
+
+  // Background white particles
+  let bgParticles = [];
+  function createBgParticles() {
+    bgParticles = [];
+    for(let i=0; i<50; i++) {
+      bgParticles.push({
+        x: Math.random() * W,
+        y: Math.random() * H,
+        size: Math.random() * 2 + 1,
+        speed: Math.random() * 0.3 + 0.1,
+        alpha: 0.5,
+      });
+    }
+  }
+  createBgParticles();
+
+  // Game variables
+  let difficulty = 'easy';
+  const difficulties = {
+    easy: { enemiesPerSec: 1, enemySpeed: 3.5, scorePerSec: 1, coinMult: 1 },
+    medium: { enemiesPerSec: 2, enemySpeed: 5.0, scorePerSec: 3, coinMult: 2 },
+    hard: { enemiesPerSec: 4, enemySpeed: 7.0, scorePerSec: 8, coinMult: 5 },
+    demon: { enemiesPerSec: 15, enemySpeed: 9.5, scorePerSec: 15, coinMult: 8 },
+  };
+
+  const player = {
+    size: 30,
+    x: 0,
+    y: 0,
+    speed: 5,
+    health: 5,
+    maxHealth: 5,
+    alive: false,
+    skinColor: '#0f0',
+    hasGun: false,
+  };
+
+  let enemies = [];
+  let particles = [];
+
+  let keys = {};
+  let lastSpawn = 0;
+  let lastScoreUpdate = 0;
+  let score = 0;
+  let coins = 0;
+  let hitsTaken = 0;
+  let secondsPlayed = 0;
+  let paused = false;
+
+  // Joystick vars
+  let joystickActive = false;
+  let joystickStart = { x: 0, y: 0 };
+  let joystickPos = { x: 0, y: 0 };
+  let joystickMove = { x: 0, y: 0 };
+
+  // Input handling
+  window.addEventListener('keydown', e => {
+    if(e.key === 'p' || e.key === 'P'){
+      if(paused) resumeGame();
+      else pauseGame();
+    }
+    keys[e.key.toLowerCase()] = true;
+  });
+  window.addEventListener('keyup', e => {
+    keys[e.key.toLowerCase()] = false;
+  });
+
+  // Joystick for mobile
+  function isMobile() {
+    return /Mobi|Android/i.test(navigator.userAgent);
+  }
+
+  function initJoystick() {
+    if(!isMobile()) {
+      joystickContainer.style.display = 'none';
+      shootBtn.style.display = 'none';
+      return;
+    }
+    joystickContainer.style.display = 'block';
+    shootBtn.style.display = player.hasGun ? 'block' : 'none';
+
+    joystickStart.x = joystickContainer.offsetLeft + joystickContainer.offsetWidth/2;
+    joystickStart.y = joystickContainer.offsetTop + joystickContainer.offsetHeight/2;
+    joystickPos.x = joystickStart.x;
+    joystickPos.y = joystickStart.y;
+
+    const maxDist = 40;
+
+    joystickContainer.addEventListener('touchstart', e => {
+      e.preventDefault();
+      joystickActive = true;
+      const t = e.targetTouches[0];
+      joystickPos.x = t.clientX;
+      joystickPos.y = t.clientY;
+      joystickMove.x = 0;
+      joystickMove.y = 0;
+      updateJoystickVisual();
+    });
+    joystickContainer.addEventListener('touchmove', e => {
+      if (!joystickActive) return;
+      e.preventDefault();
+      const t = e.targetTouches[0];
+      const dx = t.clientX - joystickStart.x;
+      const dy = t.clientY - joystickStart.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      let nx = dx, ny = dy;
+      if(dist > maxDist) {
+        nx = dx / dist * maxDist;
+        ny = dy / dist * maxDist;
+      }
+      joystickPos.x = joystickStart.x + nx;
+      joystickPos.y = joystickStart.y + ny;
+      joystickMove.x = nx / maxDist;
+      joystickMove.y = ny / maxDist;
+      updateJoystickVisual();
+    });
+    joystickContainer.addEventListener('touchend', e => {
+      joystickActive = false;
+      joystickMove.x = 0;
+      joystickMove.y = 0;
+      joystickPos.x = joystickStart.x;
+      joystickPos.y = joystickStart.y;
+      updateJoystickVisual();
+    });
+    function updateJoystickVisual() {
+      const relX = joystickPos.x - joystickStart.x + 30;
+      const relY = joystickPos.y - joystickStart.y + 30;
+      joystickInner.style.transform = `translate(${relX}px, ${relY}px)`;
+    }
+  }
+  initJoystick();
+
+  // Spawn enemy from random side toward player
+  function spawnEnemy() {
+    const side = Math.floor(Math.random() * 4);
+    const size = 20 + Math.random() * 15;
+    let x, y;
+
+    if (side === 0) { // top
+      x = Math.random() * (W - size);
+      y = -size;
+    } else if (side === 1) { // right
+      x = W + size;
+      y = Math.random() * (H - size);
+    } else if (side === 2) { // bottom
+      x = Math.random() * (W - size);
+      y = H + size;
+    } else { // left
+      x = -size;
+      y = Math.random() * (H - size);
+    }
+
+    const px = player.x + player.size / 2;
+    const py = player.y + player.size / 2;
+
+    const angle = Math.atan2(py - y, px - x);
+    const speed = difficulties[difficulty].enemySpeed;
+
+    enemies.push({
+      x, y,
+      size,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      color: '#f00',
+      isBoss: false,
+    });
+  }
+
+  // Create particles effect at x,y
+  function createParticles(x, y, count, color) {
+    for(let i=0; i<count; i++) {
+      particles.push({
+        x: x + (Math.random() - 0.5) * 20,
+        y: y + (Math.random() - 0.5) * 20,
+        vx: (Math.random() - 0.5) * 4,
+        vy: (Math.random() - 0.5) * 4,
+        alpha: 1,
+        size: 5,
+        color,
+      });
+    }
+  }
+
+  // Explode player cubes on death
+  function explodePlayer() {
+    const cx = player.x + player.size / 2;
+    const cy = player.y + player.size / 2;
+    createParticles(cx, cy, 40, '#0f0');
+  }
+
+  // Game states
+  let gameState = 'menu'; // menu, playing, paused, dead, store
+
+  // Timers & counters
+  let lastTime = 0;
+  let spawnAccumulator = 0;
+  let scoreAccumulator = 0;
+  let secondsCounter = 0;
+  let multiplierTimer = 0;
+  let coinMultiplierActive = false;
+
+  // Scores and coins persistent
+  let totalCoins = parseInt(localStorage.getItem('coins') || '0', 10);
+  coins = totalCoins;
+
+  // Store items (example)
+  const storeItems = [
+    { id: 'gun', name: 'Gun Upgrade', cost: 10, bought: false, effect() { player.hasGun = true; shootBtn.style.display = isMobile() ? 'block' : 'none'; } },
+    // add more if you want
+  ];
+
+  // Show store items in UI
+  function refreshStore() {
+    storeCoinsSpan.textContent = coins;
+    storeItemsDiv.innerHTML = '';
+    storeItems.forEach(item => {
+      const div = document.createElement('div');
+      div.className = 'store-item';
+      div.innerHTML = `<span>${item.name} - ${item.cost} coins</span>`;
+      const btn = document.createElement('button');
+      btn.textContent = item.bought ? 'Bought' : 'Buy';
+      btn.disabled = item.bought || coins < item.cost;
+      btn.addEventListener('click', () => {
+        if(coins >= item.cost && !item.bought) {
+          coins -= item.cost;
+          item.bought = true;
+          item.effect();
+          refreshStore();
+          coinsSpan.textContent = coins;
+          localStorage.setItem('coins', coins);
+        }
+      });
+      div.appendChild(btn);
+      storeItemsDiv.appendChild(div);
+    });
+  }
+
+  // Reset game variables for new game
+  function resetGame() {
+    enemies = [];
+    particles = [];
+    player.x = W/2 - player.size/2;
+    player.y = H/2 - player.size/2;
+    player.health = player.maxHealth;
+    player.alive = true;
+    score = 0;
+    secondsPlayed = 0;
+    multiplierTimer = 0;
+    coinMultiplierActive = false;
+    spawnAccumulator = 0;
+    scoreAccumulator = 0;
+    hitsTaken = 0;
+    updateUI();
+  }
+
+  // Update UI display
+  function updateUI() {
+    healthSpan.textContent = player.health;
+    scoreSpan.textContent = score;
+    coinsSpan.textContent = coins;
+    difficultyText.textContent = difficulty;
+    secondsSpan.textContent = secondsPlayed;
+    rebirthsSpan.textContent = 0; // no rebirths in current code
+  }
+
+  // Draw background particles
+  function drawBgParticles() {
+    ctx.fillStyle = '#fff';
+    bgParticles.forEach(p => {
+      ctx.globalAlpha = p.alpha;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.fill();
+
+      p.y -= p.speed;
+      if(p.y < 0) p.y = H;
+    });
+    ctx.globalAlpha = 1;
+  }
+
+  // Draw player
+  function drawPlayer() {
+    if(!player.alive || gameState !== 'playing') return;
+    ctx.fillStyle = player.skinColor;
+    ctx.fillRect(player.x, player.y, player.size, player.size);
+    if(player.hasGun) {
+      ctx.fillStyle = '#ff0';
+      ctx.fillRect(player.x + player.size/2 - 5, player.y - 10, 10, 10);
+    }
+  }
+
+  // Draw enemies
+  function drawEnemies() {
+    if(gameState !== 'playing') return;
+    enemies.forEach(e => {
+      ctx.fillStyle = e.color;
+      ctx.beginPath();
+      ctx.arc(e.x + e.size/2, e.y + e.size/2, e.size/2, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
+
+  // Draw particles
+  function drawParticles() {
+    if(gameState !== 'playing') return;
+    particles.forEach(p => {
+      ctx.globalAlpha = p.alpha;
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
+      ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+  }
+
+  // Update player position
+  function updatePlayer() {
+    if(!player.alive || paused || gameState !== 'playing') return;
+
+    let dx = 0;
+    let dy = 0;
+
+    if(isMobile()) {
+      dx = joystickMove.x * player.speed;
+      dy = joystickMove.y * player.speed;
+    } else {
+      if(keys['w'] || keys['arrowup']) dy -= player.speed;
+      if(keys['s'] || keys['arrowdown']) dy += player.speed;
+      if(keys['a'] || keys['arrowleft']) dx -= player.speed;
+      if(keys['d'] || keys['arrowright']) dx += player.speed;
+    }
+
+    player.x += dx;
+    player.y += dy;
+
+    // Clamp inside screen
+    player.x = Math.max(0, Math.min(W - player.size, player.x));
+    player.y = Math.max(0, Math.min(H - player.size, player.y));
+  }
+
+  // Update enemies position
+  function updateEnemies(delta) {
+    enemies.forEach(e => {
+      e.x += e.vx * delta;
+      e.y += e.vy * delta;
+
+      // Check collision with player
+      if(player.alive && rectCircleCollide(player.x, player.y, player.size, player.size, e.x + e.size/2, e.y + e.size/2, e.size/2)) {
+        player.health--;
+        hitsTaken++;
+        createParticles(player.x + player.size/2, player.y + player.size/2, 15, '#f00');
+        enemies.splice(enemies.indexOf(e), 1);
+        if(player.health <= 0) {
+          player.alive = false;
+          explodePlayer();
+          setTimeout(() => {
+            showDeathScreen();
+          }, 500); // small delay so explosion shows
+        }
+      }
+    });
+  }
+
+  // Check collision between rectangle and circle
+  function rectCircleCollide(rx, ry, rw, rh, cx, cy, cr) {
+    const closestX = clamp(cx, rx, rx + rw);
+    const closestY = clamp(cy, ry, ry + rh);
+
+    const dx = cx - closestX;
+    const dy = cy - closestY;
+
+    return (dx*dx + dy*dy) < cr*cr;
+  }
+  function clamp(v, min, max) {
+    return Math.min(Math.max(v, min), max);
+  }
+
+  // Update particles position
+  function updateParticles(delta) {
+    particles.forEach((p, i) => {
+      p.x += p.vx;
+      p.y += p.vy;
+      p.alpha -= 0.02;
+      p.size *= 0.95;
+      if(p.alpha <= 0 || p.size <= 0.5) {
+        particles.splice(i, 1);
+      }
+    });
+  }
+
+  // Spawn enemies periodically based on difficulty
+  function updateSpawning(delta) {
+    spawnAccumulator += delta;
+    const interval = 1 / difficulties[difficulty].enemiesPerSec;
+    if(spawnAccumulator > interval) {
+      spawnEnemy();
+      spawnAccumulator -= interval;
+    }
+  }
+
+  // Update score & coins
+  function updateScore(delta) {
+    scoreAccumulator += delta;
+    if(scoreAccumulator > 1) {
+      score += difficulties[difficulty].scorePerSec;
+      if(coinMultiplierActive) {
+        coins += 2 * difficulties[difficulty].coinMult;
+      } else {
+        coins += difficulties[difficulty].coinMult;
+      }
+      scoreAccumulator -= 1;
+      localStorage.setItem('coins', coins);
+    }
+  }
+
+  // Show death screen with fade-in
+  function showDeathScreen() {
+    finalScoreSpan.textContent = score;
+    finalCoinsSpan.textContent = coins;
+    finalRebirthsSpan.textContent = 0; // no rebirth system currently
+    gameState = 'dead';
+
+    deathScreen.style.opacity = 0;
+    deathScreen.style.display = 'flex';
+
+    // fade in using requestAnimationFrame
+    let opacity = 0;
+    function fadeIn() {
+      opacity += 0.02;
+      if(opacity > 1) opacity = 1;
+      deathScreen.style.opacity = opacity;
+      if(opacity < 1) requestAnimationFrame(fadeIn);
+    }
+    fadeIn();
+
+    ui.style.display = 'none';
+    pauseBtn.style.display = 'none';
+    joystickContainer.style.display = 'none';
+    shootBtn.style.display = 'none';
+  }
+
+  // Hide death screen
+  function hideDeathScreen() {
+    deathScreen.style.display = 'none';
+    deathScreen.style.opacity = 0;
+  }
+
+  // Game loop
+  let lastFrameTime = 0;
+  function gameLoop(time=0) {
+    if(!lastFrameTime) lastFrameTime = time;
+    const delta = (time - lastFrameTime) / 1000;
+    lastFrameTime = time;
+
+    ctx.clearRect(0, 0, W, H);
+
+    // Draw bg particles always, even in menu or death screen
+    drawBgParticles();
+
+    if(gameState === 'playing') {
+      if(!paused) {
+        updatePlayer();
+        updateEnemies(delta);
+        updateParticles(delta);
+        updateSpawning(delta);
+        updateScore(delta);
+      }
+      drawPlayer();
+      drawEnemies();
+      drawParticles();
+    }
+
+    if(gameState === 'menu') {
+      // hide player/enemies/particles by not drawing them
+      // ui hidden
+      ui.style.display = 'none';
+      pauseBtn.style.display = 'none';
+      joystickContainer.style.display = isMobile() ? 'block' : 'none';
+      shootBtn.style.display = (player.hasGun && isMobile()) ? 'block' : 'none';
+    } else if(gameState === 'playing') {
+      ui.style.display = 'flex';
+      pauseBtn.style.display = 'block';
+      joystickContainer.style.display = isMobile() ? 'block' : 'none';
+      shootBtn.style.display = (player.hasGun && isMobile()) ? 'block' : 'none';
+    }
+
+    updateUI();
+
+    requestAnimationFrame(gameLoop);
+  }
+
+  // Button listeners
+  playBtn.onclick = () => {
+    menu.style.display = 'none';
+    resetGame();
+    gameState = 'playing';
+    ui.style.display = 'flex';
+    pauseBtn.style.display = 'block';
+  };
+
+  diffBtns.forEach(btn => {
+    btn.onclick = () => {
+      diffBtns.forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      difficulty = btn.getAttribute('data-diff');
+      difficultyText.textContent = difficulty;
+      if(gameState === 'playing') {
+        // restart game on diff change mid-round
+        resetGame();
+      }
+    };
+  });
+
+  pauseBtn.onclick = () => {
+    if(paused) resumeGame();
+    else pauseGame();
+  };
+
+  restartBtn.onclick = () => {
+    hideDeathScreen();
+    resetGame();
+    gameState = 'playing';
+  };
+
+  mainMenuBtn.onclick = () => {
+    hideDeathScreen();
+    menu.style.display = 'block';
+    gameState = 'menu';
+  };
+
+  pauseRestartBtn.onclick = () => {
+    pauseMenu.classList.remove('visible');
+    resetGame();
+    gameState = 'playing';
+    paused = false;
+    pauseBtn.textContent = 'Pause';
+  };
+
+  pauseMainMenuBtn.onclick = () => {
+    pauseMenu.classList.remove('visible');
+    menu.style.display = 'block';
+    gameState = 'menu';
+    paused = false;
+    pauseBtn.textContent = 'Pause';
+  };
+
+  storeBtn.onclick = () => {
+    menu.style.display = 'none';
+    gameState = 'store';
+    refreshStore();
+    storeScreen.style.display = 'block';
+  };
+
+  backToMenuBtn.onclick = () => {
+    storeScreen.style.display = 'none';
+    menu.style.display = 'block';
+    gameState = 'menu';
+  };
+
+  rebirthBtn.onclick = () => {
+    alert('Rebirth feature not implemented yet.');
+  };
+
+  shootBtn.onclick = () => {
+    if(gameState !== 'playing' || paused) return;
+    // simple shooting effect
+    createParticles(player.x + player.size/2, player.y, 10, '#ff0');
+  };
+
+  // Pause/resume game
+  function pauseGame() {
+    if(gameState !== 'playing') return;
+    paused = true;
+    pauseBtn.textContent = 'Resume';
+    pauseMenu.classList.add('visible');
+  }
+  function resumeGame() {
+    if(gameState !== 'playing') return;
+    paused = false;
+    pauseBtn.textContent = 'Pause';
+    pauseMenu.classList.remove('visible');
+  }
+
+  // Initial setup
+  updateUI();
+  gameLoop();
+})();
+</script>
+
+</body>
+</html>
